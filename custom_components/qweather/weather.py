@@ -16,6 +16,8 @@ from homeassistant.helpers.device_registry import DeviceInfo
 from .api import QWeatherClient, QWeatherError, coordinates, validate_host
 from .data import current_attributes, daily_forecasts, hourly_forecasts, extra_attributes
 from .settings import normalize
+from .auth import async_auth
+from homeassistant.exceptions import ConfigEntryNotReady
 
 _LOGGER = logging.getLogger(__name__)
 SCAN_INTERVAL = timedelta(minutes=30)
@@ -41,9 +43,13 @@ async def async_setup_platform(hass, config, async_add_entities, discovery_info=
 
 async def async_setup_entry(hass, entry, async_add_entities):
     data = normalize({**entry.data, **entry.options})
+    try:
+        auth = await async_auth(hass, data)
+    except ValueError as err:
+        raise ConfigEntryNotReady("Unable to load JWT signing key; check key file and permissions") from err
     latitude, longitude = coordinates(data["location"])
-    client = QWeatherClient(async_get_clientsession(hass), data["api_host"], data["api_key"], latitude, longitude,
-                            data["default"], data["hours"], data["extras"])
+    client = QWeatherClient(async_get_clientsession(hass), data["api_host"], data.get("api_key"), latitude, longitude,
+                            data["default"], data["hours"], data["extras"], auth=auth)
     entity = QWeather(client, data["name"], interval=data["interval"])
     entity._attr_unique_id = entry.data["entity_unique_id"]
     entity._attr_device_info = DeviceInfo(identifiers={("qweather", entry.entry_id)}, name=data["name"], manufacturer="QWeather", model="Weather API v1")

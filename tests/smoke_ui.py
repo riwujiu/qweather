@@ -97,6 +97,24 @@ async def main():
             assert len(active()) == 1
             print("Reconfigure, blank key preservation, stable entity ID, unload/reload OK", flush=True)
 
+            from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+            from cryptography.hazmat.primitives import serialization
+            private = root / "jwt-private.pem"
+            private.write_bytes(Ed25519PrivateKey.generate().private_bytes(serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8, serialization.NoEncryption()))
+            flow = await hass.config_entries.flow.async_init("qweather", context={"source":"reconfigure", "entry_id":entry.entry_id})
+            result = await hass.config_entries.flow.async_configure(flow["flow_id"], {**data, "auth_type":"jwt", "api_key":"", "key_id":"test-kid", "developer_id":"test-iss", "project_id":"test-sub", "private_key_file":str(private)})
+            assert result["reason"] == "reconfigure_successful"
+            await hass.async_block_till_done()
+            assert entry.data["auth_type"] == "jwt" and "api_key" not in entry.data
+            assert entry.state.value == "loaded" and len(active()) == 1
+            assert registry.async_get("weather.zhangsha").id == legacy.id
+            flow = await hass.config_entries.flow.async_init("qweather", context={"source":"reconfigure", "entry_id":entry.entry_id})
+            result = await hass.config_entries.flow.async_configure(flow["flow_id"], {**data, "auth_type":"api_key"})
+            assert result["reason"] == "reconfigure_successful"
+            await hass.async_block_till_done()
+            assert "private_key_file" not in entry.data and entry.data["api_key"] == data["api_key"]
+            print("API Key/JWT switching, obsolete credential removal and stable entity identity OK", flush=True)
+
             # Restore the original coordinates and prove legacy YAML imports once.
             assert await hass.config_entries.async_remove(entry.entry_id)
             await hass.async_block_till_done()

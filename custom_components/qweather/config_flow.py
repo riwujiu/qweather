@@ -10,6 +10,7 @@ from .api import QWeatherClient, QWeatherError, coordinates
 from .const import DOMAIN
 from .data import current_attributes, daily_forecasts, hourly_forecasts
 from .settings import DEFAULTS, OPTIONS, normalize, location_id
+from .auth import async_auth
 
 
 def form_schema(defaults, credentials=False, new=False):
@@ -18,8 +19,13 @@ def form_schema(defaults, credentials=False, new=False):
     if credentials:
         fields[vol.Required("api_host", default=defaults.get("api_host", ""))] = str
         # Existing keys are never put into the form response. Blank preserves it.
-        key_field = vol.Required("api_key") if new else vol.Optional("api_key", default="")
+        fields[vol.Required("auth_type", default=defaults.get("auth_type", "api_key"))] = selector.SelectSelector(
+            selector.SelectSelectorConfig(options=["api_key", "jwt"], translation_key="auth_type")
+        )
+        key_field = vol.Optional("api_key", default="")
         fields[key_field] = selector.TextSelector(selector.TextSelectorConfig(type=selector.TextSelectorType.PASSWORD))
+        for field in ("key_id", "developer_id", "project_id", "private_key_file"):
+            fields[vol.Optional(field, default=defaults.get(field, "/config/.qweather-jwt/ed25519-private.pem" if field == "private_key_file" else ""))] = str
         fields[vol.Required("location", default=defaults.get("location", ""))] = str
     for key, low, high in (("default", 1, 10), ("hours", 1, 240), ("interval", 300, 86400)):
         fields[vol.Required(key, default=defaults.get(key, DEFAULTS[key]))] = vol.All(vol.Coerce(int), vol.Range(min=low, max=high))
@@ -31,7 +37,8 @@ def form_schema(defaults, credentials=False, new=False):
 
 async def validate_connection(hass, data):
     latitude, longitude = coordinates(data["location"])
-    client = QWeatherClient(async_get_clientsession(hass), data["api_host"], data["api_key"], latitude, longitude, data["default"], data["hours"])
+    auth = await async_auth(hass, data)
+    client = QWeatherClient(async_get_clientsession(hass), data["api_host"], data.get("api_key"), latitude, longitude, data["default"], data["hours"], auth=auth)
     current, daily, hourly = await client.fetch()
     current_attributes(current)
     daily_forecasts(daily)
@@ -81,7 +88,7 @@ class QWeatherConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         errors = {}
         if user_input is not None:
             candidate = {**current, **user_input}
-            candidate["api_key"] = user_input.get("api_key") or current["api_key"]
+            candidate["api_key"] = user_input.get("api_key") or current.get("api_key", "")
             try:
                 data = normalize(candidate)
                 uid = location_id(data)

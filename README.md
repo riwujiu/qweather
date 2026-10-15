@@ -39,8 +39,24 @@ weather:
 - `/weather/v1/daily/{latitude}/{longitude}?days=7`
 - `/weather/v1/hourly/{latitude}/{longitude}?hours=24`
 
-通过 `X-QW-Api-Key` 请求头鉴权；HTTPS 校验证书，禁止重定向转发凭据。每个请求最长 20 秒，核心天气一轮最长 60 秒；三个附加产品另各有 20 秒超时。
-当前实现支持 API Key，不生成 JWT。新版 API Key 是否可用需要个人 Host、凭据及服务权限实测。
+支持 API Key 和 JWT 两种认证，请求只发送所选认证方式的标头。HTTPS 校验证书，禁止重定向转发凭据。每个请求最长 20 秒，核心天气一轮最长 60 秒；三个附加产品另各有 20 秒超时。
+
+### JWT（推荐，0.4.0 起）
+
+在 HA 容器持久化的 `/config/` 目录下生成 Ed25519 私钥和公钥，仅将公钥上传至和风控制台“项目管理 → 添加凭据 → JSON Web Token”。私钥文件应只允许 HA 运行用户读取，不应上传仓库或粘贴到聊天。可以使用官方文档中的 OpenSSL 命令生成密钥。
+
+在新增集成或“重新配置”中选择 JWT，并填写：
+
+- 凭据 ID（`kid`）：创建 JWT 凭据后显示的 ID。
+- 开发者 ID（`iss`）：控制台设置中 Q 开头的开发者 ID。
+- 项目 ID（`sub`）：凭据所属的项目 ID。
+- HA 服务器私钥文件路径：容器内绝对路径，默认 `/config/.qweather-jwt/ed25519-private.pem`；文件必须是未加密的 Ed25519 PEM 私钥。
+
+JWT 模式 API Key 可留空。保存前验证真实天气接口；切换成功后移除条目中另一种认证方式的参数，保留天气实体 ID。私钥在后台线程读取，不回填界面，不存入配置条目；配置条目只存私钥路径和三个 ID。替换私钥文件后需重新加载集成，并确保公钥已在控制台更新。
+
+集成自动使用 EdDSA 签名，Header 仅含 `alg`、`kid`，Payload 含 `iss`、`sub`、`iat`、`exp`。签发时间回退 30 秒，过期时间为当前时间后 15 分钟，提前 60 秒续期，通过 `Authorization: Bearer` 发送。实时、预报和附加产品共用此认证。服务器需保持正确时间。旧配置默认继续使用 API Key，首次 YAML 导入仍使用 API Key；JWT 在界面配置。
+
+官方文档说明从 2027-01-01 起将限制 API Key 每日请求数量，建议迁移 JWT，具体额度以控制台为准。
 
 ## 使用预报
 
@@ -88,3 +104,5 @@ python -m unittest discover -s tests -v
 `tests/smoke_ui.py` 在隔离 HA 中验证界面添加、参数／连接错误、重复配置拦截、沿用 YAML 实体登记、选项自动重载、重新配置、Key 留空保留、位置修改后 ID 不变、定时刷新取消，以及 YAML 自动导入。0.3.0 已在 HA 2026.9.3 完成这些流程和真实接口验证。
 
 参考：[天气 API](https://dev.qweather.com/docs/api/weather/)、[身份认证](https://dev.qweather.com/docs/configuration/authentication/)、[API Host](https://dev.qweather.com/docs/configuration/api-host/)。
+
+0.4.0 已在 HA 2026.9.3 通过 18 项单元测试、两种认证的界面切换流程，以及真实 JWT 的六类产品和 daily 7 条／hourly 24 条预报服务验证。签名测试使用随机临时密钥，验证公钥验签、必要声明、缓存及续期、时钟回退和标头互斥；仓库不包含私钥或真实认证 ID。

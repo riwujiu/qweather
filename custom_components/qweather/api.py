@@ -31,10 +31,11 @@ def coordinates(value):
 
 
 class QWeatherClient:
-    def __init__(self, session, host, key, latitude, longitude, days=7, hours=24, extras=()):
+    def __init__(self, session, host, key, latitude, longitude, days=7, hours=24, extras=(), auth=None):
         self._session = session
         self._host = validate_host(host)
         self._key = key
+        self._auth = auth
         self.latitude, self.longitude = latitude, longitude
         self.days, self.hours = days, hours
         self.extras = extras
@@ -46,7 +47,7 @@ class QWeatherClient:
         url = f"https://{self._host}{path}"
         try:
             async with self._session.get(
-                url, headers={"X-QW-Api-Key": self._key},
+                url, headers=self._auth.headers() if self._auth else {"X-QW-Api-Key": self._key},
                 params={"lang": "zh", "localTime": "true", **params},
                 timeout=aiohttp.ClientTimeout(total=20), allow_redirects=False,
             ) as response:

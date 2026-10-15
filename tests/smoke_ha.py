@@ -22,6 +22,10 @@ async def main():
     credentials = json.load(sys.stdin) if live else {"api_host": "example.re.qweatherapi.com", "api_key": "test"}
     config = {"homeassistant": {"name": "QWeather smoke", "time_zone": "Asia/Shanghai", "unit_system": "metric"},
               "weather": [{"platform": "qweather", "name": "QWeather Test", "location": "112.92,28.22", "extras": ["air", "alerts", "minutely"], **credentials}]}
+    jwt_data = config["weather"][0].copy() if credentials.get("auth_type") == "jwt" else None
+    if jwt_data:
+        config["weather"] = []
+        jwt_data.pop("platform")
     payloads = [json.loads((source / "tests" / "fixtures" / f"{name}.json").read_text(encoding="utf-8-sig")) for name in ("current", "daily", "hourly")]
     async def fake_fetch(self):
         return tuple(payloads)
@@ -34,6 +38,9 @@ async def main():
     try:
         with patch.object(QWeatherClient, "fetch", original if live else fake_fetch), patch.object(QWeatherClient, "fetch_extras", original_extras if live else fake_extras):
             result = await bootstrap.async_from_config_dict(config, hass)
+            if jwt_data:
+                flow = await hass.config_entries.flow.async_init("qweather", context={"source": "user"}, data=jwt_data)
+                assert flow["type"] == "create_entry", "JWT flow failed"
             await hass.async_block_till_done()
             await hass.async_start()
             await hass.async_block_till_done()

@@ -2,12 +2,86 @@
   "title": "QWeather",
   "config": {
     "step": {
-      "user": {"title":"Connect to QWeather","description":"Enter the API Host from your QWeather console, without a scheme or path. Location is longitude,latitude. Interval is in seconds; all products use up to six requests per refresh.","data":{"name":"Name","api_host":"API Host","api_key":"API Key","location":"Longitude,latitude","default":"Daily forecast days","hours":"Hourly forecast hours","interval":"Update interval (seconds)","extras":"Additional products"}},
-      "reconfigure":{"title":"Reconfigure QWeather","description":"Leave API Key blank to keep the existing key. The weather entity ID is preserved after a location change.","data":{"name":"Name","api_host":"API Host","api_key":"New API Key (optional)","location":"Longitude,latitude","default":"Daily forecast days","hours":"Hourly forecast hours","interval":"Update interval (seconds)","extras":"Additional products"}}
+      "user": {
+        "title": "Connect to QWeather",
+        "description": "Enter the API Host from your QWeather console, without a scheme or path. Location is longitude,latitude. Interval is in seconds; all products use up to six requests per refresh.\nFor JWT, enter the credential, developer and project IDs and the Ed25519 private key path inside HA; leave API Key blank. JWT fields are ignored for API Key authentication.",
+        "data": {
+          "name": "Name",
+          "api_host": "API Host",
+          "api_key": "API Key",
+          "location": "Longitude,latitude",
+          "default": "Daily forecast days",
+          "hours": "Hourly forecast hours",
+          "interval": "Update interval (seconds)",
+          "extras": "Additional products",
+          "auth_type": "Authentication method",
+          "key_id": "JWT credential ID (kid)",
+          "developer_id": "Developer ID (iss)",
+          "project_id": "Project ID (sub)",
+          "private_key_file": "Private key file path on HA server"
+        }
+      },
+      "reconfigure": {
+        "title": "Reconfigure QWeather",
+        "description": "Leave API Key blank to keep the existing key. The weather entity ID is preserved after a location change.\nFor JWT, enter the credential, developer and project IDs and the Ed25519 private key path inside HA; leave API Key blank. JWT fields are ignored for API Key authentication.",
+        "data": {
+          "name": "Name",
+          "api_host": "API Host",
+          "api_key": "New API Key (optional)",
+          "location": "Longitude,latitude",
+          "default": "Daily forecast days",
+          "hours": "Hourly forecast hours",
+          "interval": "Update interval (seconds)",
+          "extras": "Additional products",
+          "auth_type": "Authentication method",
+          "key_id": "JWT credential ID (kid)",
+          "developer_id": "Developer ID (iss)",
+          "project_id": "Project ID (sub)",
+          "private_key_file": "Private key file path on HA server"
+        }
+      }
     },
-    "error":{"cannot_connect":"Unable to fetch weather. Check API Host, key, permissions, quota and connectivity.","invalid_settings":"Check your coordinates and numeric ranges."},
-    "abort":{"already_configured":"This location is already configured.","invalid_settings":"Invalid YAML settings.","reconfigure_successful":"Configuration updated."}
+    "error": {
+      "cannot_connect": "Unable to fetch weather. Check API Host, key, permissions, quota and connectivity.",
+      "invalid_settings": "Check coordinates, ranges and credentials. JWT requires a readable Ed25519 private key file."
+    },
+    "abort": {
+      "already_configured": "This location is already configured.",
+      "invalid_settings": "Invalid YAML settings.",
+      "reconfigure_successful": "Configuration updated."
+    }
   },
-  "options":{"step":{"init":{"title":"QWeather options","description":"Interval is in seconds (minimum 300). The 24-hour precipitation total requires at least 24 forecast hours. Disabling a supplemental product makes its screen data unavailable.","data":{"name":"Name","default":"Daily forecast days","hours":"Hourly forecast hours","interval":"Update interval (seconds)","extras":"Additional products"}}},"error":{"invalid_settings":"Check the numeric ranges."}},
-  "selector":{"extras":{"options":{"air":"Air quality (PM2.5)","alerts":"Weather alerts and full text","minutely":"Minutely precipitation summary"}}}
+  "options": {
+    "step": {
+      "init": {
+        "title": "QWeather options",
+        "description": "Interval is in seconds (minimum 300). The 24-hour precipitation total requires at least 24 forecast hours. Disabling a supplemental product makes its screen data unavailable.",
+        "data": {
+          "name": "Name",
+          "default": "Daily forecast days",
+          "hours": "Hourly forecast hours",
+          "interval": "Update interval (seconds)",
+          "extras": "Additional products"
+        }
+      }
+    },
+    "error": {
+      "invalid_settings": "Check the numeric ranges."
+    }
+  },
+  "selector": {
+    "extras": {
+      "options": {
+        "air": "Air quality (PM2.5)",
+        "alerts": "Weather alerts and full text",
+        "minutely": "Minutely precipitation summary"
+      }
+    },
+    "auth_type": {
+      "options": {
+        "api_key": "API Key",
+        "jwt": "JWT (Ed25519)"
+      }
+    }
+  }
 }
