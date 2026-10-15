@@ -31,15 +31,19 @@ def coordinates(value):
 
 
 class QWeatherClient:
-    def __init__(self, session, host, key, latitude, longitude, days=7, hours=24):
+    def __init__(self, session, host, key, latitude, longitude, days=7, hours=24, extras=()):
         self._session = session
         self._host = validate_host(host)
         self._key = key
         self.latitude, self.longitude = latitude, longitude
         self.days, self.hours = days, hours
+        self.extras = extras
 
     async def _get(self, endpoint, **params):
-        url = f"https://{self._host}/weather/v1/{endpoint}/{self.latitude:.2f}/{self.longitude:.2f}"
+        return await self._request(f"/weather/v1/{endpoint}/{self.latitude:.2f}/{self.longitude:.2f}", **params)
+
+    async def _request(self, path, **params):
+        url = f"https://{self._host}{path}"
         try:
             async with self._session.get(
                 url, headers={"X-QW-Api-Key": self._key},
@@ -49,7 +53,7 @@ class QWeatherClient:
                 if response.status != 200:
                     raise QWeatherError(f"QWeather HTTP {response.status}")
                 data = await response.json()
-                if not isinstance(data, dict) or "error" in data:
+                if not isinstance(data, dict) or "error" in data or str(data.get("code", "200")) != "200":
                     raise QWeatherError("Invalid QWeather response")
                 return data
         except (aiohttp.ClientError, TimeoutError, ValueError):
@@ -62,3 +66,19 @@ class QWeatherClient:
             daily = await self._get("daily", days=self.days)
             hourly = await self._get("hourly", hours=self.hours)
         return current, daily, hourly
+
+    async def fetch_extras(self):
+        """Each supplemental product fails independently from core weather."""
+        paths = {
+            "air": f"/airquality/v1/current/{self.latitude:.2f}/{self.longitude:.2f}",
+            "alerts": f"/weatheralert/v1/current/{self.latitude:.2f}/{self.longitude:.2f}",
+            "minutely": "/v7/minutely/5m",
+        }
+        result = {}
+        for name in self.extras:
+            try:
+                params = {"location": f"{self.longitude:.2f},{self.latitude:.2f}"} if name == "minutely" else {}
+                result[name] = await self._request(paths[name], **params)
+            except QWeatherError:
+                result[name] = None
+        return result

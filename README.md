@@ -16,11 +16,12 @@ weather:
     location: "112.94,28.23"  # 经度,纬度；内部调用 v1 时按纬度/经度排序
     default: 7              # 1–10 天
     hours: 24               # 1–240 小时
+    extras: [air, alerts, minutely] # 可选，默认不查询附加产品
     scan_interval: 1800     # 秒，默认 30 分钟
 ```
 
 在服务器的 `secrets.yaml` 中设置个人 API Host（控制台→设置）和 API Key。Host 只填域名，不加 `https://` 或路径。不要上传 secrets.yaml。
-位置会四舍五入到两位小数，符合 v1 精度要求。每轮最多请求三个接口；默认每天约 144 次请求，收费和额度以和风控制台为准。
+位置会四舍五入到两位小数，符合 v1 精度要求。不启用附加产品时每轮最多三个请求，默认每天约 144 次；全部启用时每轮最多六个，默认每天约 288 次。收费和额度以和风控制台为准。
 
 新版接口：
 
@@ -28,7 +29,7 @@ weather:
 - `/weather/v1/daily/{latitude}/{longitude}?days=7`
 - `/weather/v1/hourly/{latitude}/{longitude}?hours=24`
 
-通过 `X-QW-Api-Key` 请求头鉴权；HTTPS 校验证书，禁止重定向转发凭据。每个请求最长 20 秒，一轮最长 60 秒。
+通过 `X-QW-Api-Key` 请求头鉴权；HTTPS 校验证书，禁止重定向转发凭据。每个请求最长 20 秒，核心天气一轮最长 60 秒；三个附加产品另各有 20 秒超时。
 当前实现支持 API Key，不生成 JWT。新版 API Key 是否可用需要个人 Host、凭据及服务权限实测。
 
 ## 使用预报
@@ -49,8 +50,15 @@ data:
 
 ## 功能边界与迁移
 
-本版提供实时天气、日预报和小时预报。旧版空气质量、生活指数、分钟降雨、天气预警属性尚未迁移，不能把空结果解释为“无预警”。已有其他集成提供这些数据时请继续保留。
-独立安装会新增天气实体，不会自动替换已有天气、预警和屏幕模板。不要直接把旧屏幕数据源整体切换到本集成。
+0.2.0 增加可选空气质量、天气预警和分钟降雨，作为天气实体属性提供，便于 HA 模板使用。生活指数尚未迁移。
+
+- `air` 使用 `/airquality/v1/current/纬度/经度`，提供 `pm25`、`air_available` 及来源信息。
+- `alerts` 使用 `/weatheralert/v1/current/纬度/经度`，提供 `alerts`、`alerts_available` 及来源信息。每条包含标题、正文（含防御指南）、颜色和屏幕兼容等级代码；过滤取消、被替代及已过期预警。请求失败时 `alerts` 为 `null`，成功且无有效预警时才为 `[]`。
+- `minutely` 使用官方当前仍指定的 `/v7/minutely/5m` 路径及个人 API Host，提供 `minutely_summary`、`minutely_available` 及来源信息。此产品的官方路径仍为 v7，不应猜测一个 v1 替代路径。
+
+各附加产品独立失败，清除本轮对应值，不影响核心天气；未启用的产品不请求。`precipitation_1h` 为过去一小时实时降水，`precipitation_next_24h` 为未来连续 24 小时预报降水总和，仅完整取得 24 小时数据时提供。
+
+独立安装不会自动迁移原有集成。先备份，再调整依赖实体和屏幕模板，验证新数据有效后删除旧集成。模板应同时检查天气实体可用性和对应产品的 `*_available`，避免把失败误认为无预警、零污染或零降雨。
 旧版的天气状态名称已修正为 HA 支持的状态；修正了雪天气误映射为雨和湿度误作降雨概率的问题。
 
 ## 验证
@@ -63,8 +71,8 @@ python -m unittest discover -s tests -v
 
 `tests/fixtures` 为 2026-10-15 长沙近似坐标的真实 v1 响应样本，不含凭据。测试覆盖单位、经纬度次序、时区、HTTP 错误、缺失数据与失败后恢复。
 
-2026-10-15 20:56（Asia/Shanghai）验证：Home Assistant 2026.9.3 中 11 项测试全部通过；隔离 HA 使用真实服务加载实体成功，`weather.get_forecasts` 返回 7 天与 24 小时预报。HA 将原生 m/s 和 m 按公制显示设置转换为 km/h 和 km。此次未修改正式 HA 配置。
+2026-10-15（Asia/Shanghai）验证：Home Assistant 2026.9.3 中 16 项测试全部通过；隔离 HA 使用真实服务加载实体成功，六个产品均可用，`weather.get_forecasts` 返回 7 天与 24 小时预报。HA 将原生 m/s 和 m 按公制显示设置转换为 km/h 和 km。21:08 正式 HA 已确认天气、PM2.5、预警、未来 24 小时降水和七日预报模板有效。
 
-`tests/smoke_ha.py` 使用响应样本验证完整 HA 加载和预报服务；加 `--live` 时从标准输入接收仅含 `api_host`、`api_key` 的 JSON，供私下验证。测试创建临时独立 HA 配置目录，结束后删除，不读取正式配置。
+`tests/smoke_ha.py` 使用响应样本验证完整 HA 加载、附加产品和预报服务；加 `--live` 时从标准输入接收仅含 `api_host`、`api_key` 的 JSON，供私下验证。测试创建临时独立 HA 配置目录，结束后删除，不读取正式配置。
 
 参考：[天气 API](https://dev.qweather.com/docs/api/weather/)、[身份认证](https://dev.qweather.com/docs/configuration/authentication/)、[API Host](https://dev.qweather.com/docs/configuration/api-host/)。

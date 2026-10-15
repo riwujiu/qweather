@@ -1,6 +1,6 @@
 """Translate documented v1 payloads into Home Assistant native units."""
 import math
-from datetime import datetime
+from datetime import datetime, timezone
 
 from .condition import CONDITION_MAP, EXCEPTIONAL
 
@@ -60,6 +60,7 @@ def current_attributes(data):
         "extra_state_attributes": {
             "condition_desc": data["condition"].get("text"),
             "attributions": data.get("metadata", {}).get("attributions", []),
+            "precipitation_1h": measure(data.get("precipitation", {}), "amount", "mm"),
         },
     }
 
@@ -97,6 +98,55 @@ def daily_forecasts(payload):
             item["native_precipitation"] = round(day_rain + night_rain, 3)
         result.append(item)
     return result
+
+
+def extra_attributes(payloads, now=None):
+    """Normalize independent products, preserving unknown versus no alerts."""
+    now = now or datetime.now(timezone.utc)
+    attrs = {"pm25": None, "alerts": None, "minutely_summary": None}
+    for name, data in payloads.items():
+        attrs[f"{name}_available"] = False
+        if data is None:
+            continue
+        try:
+            if name == "air":
+                pollutants = data["pollutants"]
+                pm = next((p for p in pollutants if p.get("code") == "pm2p5"), None)
+                if pm is None or pm["concentration"]["unit"].replace("³", "3").replace("µ", "μ") not in ("μg/m3", "ug/m3"):
+                    raise ValueError("Missing PM2.5")
+                attrs["pm25"] = number(pm["concentration"]["value"])
+                if attrs["pm25"] is None:
+                    raise ValueError("Missing PM2.5 value")
+            elif name == "alerts":
+                alerts = data.get("alerts", [])
+                if not isinstance(alerts, list) or (not alerts and data.get("metadata", {}).get("zeroResult") is not True):
+                    raise ValueError("Ambiguous empty alerts")
+                superseded = {old for item in alerts for old in item.get("messageType", {}).get("supersedes", [])}
+                normalized = []
+                for item in alerts:
+                    if item.get("messageType", {}).get("code") == "cancel" or item.get("id") in superseded:
+                        continue
+                    if item.get("expireTime") and datetime.fromisoformat(timestamp(item["expireTime"])) <= now:
+                        continue
+                    if item.get("effectiveTime") and datetime.fromisoformat(timestamp(item["effectiveTime"])) > now:
+                        continue
+                    color = (item.get("color") or {}).get("code", "")
+                    level = {"blue": "01", "yellow": "02", "orange": "03", "red": "04"}.get(color, "00")
+                    body = item.get("description") or "暂无详细内容"
+                    if item.get("instruction"):
+                        body += "\n\n" + item["instruction"]
+                    normalized.append({"title": item.get("headline") or "天气预警", "description": body,
+                                       "code": "qw" + level, "color": color, "id": item.get("id")})
+                attrs["alerts"] = normalized
+            elif name == "minutely":
+                if str(data.get("code")) != "200" or not isinstance(data.get("summary"), str):
+                    raise ValueError("Missing minutely summary")
+                attrs["minutely_summary"] = data["summary"]
+            attrs[f"{name}_attributions"] = data.get("metadata", {}).get("attributions", data.get("refer", {}).get("sources", []))
+            attrs[f"{name}_available"] = True
+        except (ValueError, TypeError, KeyError, AttributeError):
+            attrs[{"air": "pm25", "alerts": "alerts", "minutely": "minutely_summary"}[name]] = None
+    return attrs
 
 
 def hourly_forecasts(payload):

@@ -20,15 +20,18 @@ async def main():
     live = "--live" in sys.argv
     credentials = json.load(sys.stdin) if live else {"api_host": "example.re.qweatherapi.com", "api_key": "test"}
     config = {"homeassistant": {"name": "QWeather smoke", "time_zone": "Asia/Shanghai", "unit_system": "metric"},
-              "weather": [{"platform": "qweather", "name": "QWeather Test", "location": "112.94,28.23", **credentials}]}
+              "weather": [{"platform": "qweather", "name": "QWeather Test", "location": "112.92,28.22", "extras": ["air", "alerts", "minutely"], **credentials}]}
     payloads = [json.loads((source / "tests" / "fixtures" / f"{name}.json").read_text(encoding="utf-8-sig")) for name in ("current", "daily", "hourly")]
     async def fake_fetch(self):
         return tuple(payloads)
+    async def fake_extras(self):
+        return {name: json.loads((source / "tests" / "fixtures" / f"{name}.json").read_text(encoding="utf-8-sig")) for name in ("air", "alerts", "minutely")}
     original = QWeatherClient.fetch
+    original_extras = QWeatherClient.fetch_extras
     hass = HomeAssistant(str(root))
     loader.async_setup(hass)
     try:
-        with patch.object(QWeatherClient, "fetch", original if live else fake_fetch):
+        with patch.object(QWeatherClient, "fetch", original if live else fake_fetch), patch.object(QWeatherClient, "fetch_extras", original_extras if live else fake_extras):
             result = await bootstrap.async_from_config_dict(config, hass)
             await hass.async_block_till_done()
             await hass.async_start()
@@ -37,6 +40,9 @@ async def main():
             assert result and len(states) == 1, "Weather entity not created"
             state = states[0]
             assert state.state not in ("unknown", "unavailable"), "Weather unavailable"
+            assert state.attributes.get("air_available") and state.attributes.get("alerts_available") and state.attributes.get("minutely_available"), "Supplemental product unavailable"
+            assert state.attributes.get("pm25") is not None
+            assert state.attributes.get("precipitation_next_24h") is not None
             for kind, count in (("daily", 7), ("hourly", 24)):
                 response = await hass.services.async_call("weather", "get_forecasts", {"entity_id": state.entity_id, "type": kind}, blocking=True, return_response=True)
                 rows = response[state.entity_id]["forecast"]

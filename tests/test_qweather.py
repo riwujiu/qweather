@@ -1,5 +1,6 @@
 """Run with unittest in a Home Assistant Python environment."""
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 import unittest
 from unittest.mock import AsyncMock
@@ -9,7 +10,7 @@ import voluptuous as vol
 
 from custom_components.qweather.api import QWeatherClient, QWeatherError, coordinates, validate_host
 from custom_components.qweather.condition import CONDITION_MAP
-from custom_components.qweather.data import current_attributes, daily_forecasts, hourly_forecasts
+from custom_components.qweather.data import current_attributes, daily_forecasts, hourly_forecasts, extra_attributes
 from custom_components.qweather.weather import QWeather, PLATFORM_SCHEMA
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -134,6 +135,46 @@ class AsyncTests(unittest.IsolatedAsyncioTestCase):
         await entity.async_update()
         self.assertFalse(entity.available)
 
+
+
+class ExtraTests(unittest.TestCase):
+    def test_live_product_samples(self):
+        attrs = extra_attributes({name: fixture(name) for name in ('air', 'alerts', 'minutely')}, datetime(2026, 10, 15, 13, tzinfo=timezone.utc))
+        self.assertTrue(attrs['air_available'])
+        self.assertIsNotNone(attrs['pm25'])
+        self.assertTrue(attrs['alerts_available'])
+        self.assertTrue(attrs['alerts'])
+        self.assertTrue(attrs['alerts'][0]['code'].endswith('01'))
+        self.assertIn('政府', attrs['alerts'][0]['description'])
+        self.assertTrue(attrs['minutely_available'])
+        self.assertTrue(attrs['minutely_summary'])
+
+    def test_error_is_not_no_alerts(self):
+        attrs = extra_attributes({'alerts': None, 'air': None, 'minutely': None})
+        self.assertFalse(attrs['alerts_available'])
+        self.assertIsNone(attrs['alerts'])
+        self.assertIsNone(attrs['pm25'])
+        self.assertIsNone(attrs['minutely_summary'])
+
+    def test_empty_success_and_malformed(self):
+        attrs = extra_attributes({'alerts': {'metadata': {'zeroResult': True}, 'alerts': []}})
+        self.assertTrue(attrs['alerts_available'])
+        self.assertEqual(attrs['alerts'], [])
+        attrs = extra_attributes({'alerts': {}})
+        self.assertFalse(attrs['alerts_available'])
+
+    def test_expired_and_cancelled(self):
+        data = fixture('alerts')
+        expired = extra_attributes({'alerts': data}, datetime(2030, 1, 1, tzinfo=timezone.utc))
+        self.assertEqual(expired['alerts'], [])
+        data['alerts'][0]['messageType']['code'] = 'cancel'
+        cancelled = extra_attributes({'alerts': data}, datetime(2026, 10, 15, 13, tzinfo=timezone.utc))
+        self.assertEqual(cancelled['alerts'], [])
+
+    def test_independent_product_failure(self):
+        attrs = extra_attributes({'air': {'pollutants': []}, 'minutely': fixture('minutely')})
+        self.assertFalse(attrs['air_available'])
+        self.assertTrue(attrs['minutely_available'])
 
 if __name__ == "__main__":
     unittest.main()

@@ -11,7 +11,7 @@ from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import QWeatherClient, QWeatherError, coordinates, validate_host
-from .data import current_attributes, daily_forecasts, hourly_forecasts
+from .data import current_attributes, daily_forecasts, hourly_forecasts, extra_attributes
 
 _LOGGER = logging.getLogger(__name__)
 SCAN_INTERVAL = timedelta(minutes=30)
@@ -22,6 +22,7 @@ PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend({
     vol.Optional("name", default="和风天气"): cv.string,
     vol.Optional("default", default=7): vol.All(vol.Coerce(int), vol.Range(min=1, max=10)),
     vol.Optional("hours", default=24): vol.All(vol.Coerce(int), vol.Range(min=1, max=240)),
+    vol.Optional("extras", default=[]): vol.All(cv.ensure_list, [vol.In(("air", "alerts", "minutely"))]),
 })
 
 
@@ -30,7 +31,7 @@ async def async_setup_platform(hass, config, async_add_entities, discovery_info=
     latitude, longitude = config["location"]
     client = QWeatherClient(async_get_clientsession(hass), config["api_host"],
                             config["api_key"], latitude, longitude,
-                            config["default"], config["hours"])
+                            config["default"], config["hours"], config["extras"])
     async_add_entities([QWeather(client, config["name"])], True)
 
 
@@ -60,6 +61,11 @@ class QWeather(WeatherEntity):
             attributes = current_attributes(current)
             daily_data = daily_forecasts(daily)
             hourly_data = hourly_forecasts(hourly)
+            rain = [row.get("native_precipitation") for row in hourly_data[:24]]
+            attributes["extra_state_attributes"]["precipitation_next_24h"] = (
+                round(sum(rain), 3) if len(rain) == 24 and all(v is not None for v in rain) else None
+            )
+            attributes["extra_state_attributes"].update(extra_attributes(await self._client.fetch_extras()))
         except (QWeatherError, ValueError, TypeError, KeyError, AttributeError, aiohttp.ClientError, TimeoutError):
             self._attr_available = False
             self._daily = []
@@ -84,4 +90,3 @@ class QWeather(WeatherEntity):
         if not self.available:
             return None
         return self._hourly
-
