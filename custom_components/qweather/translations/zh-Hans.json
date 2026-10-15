@@ -4,7 +4,7 @@
     "step": {
       "user": {
         "title": "连接和风天气",
-        "description": "API Host 位于和风天气控制台的设置中，仅填写域名。位置格式为经度,纬度，例如 112.92,28.22。更新间隔以秒计；启用全部功能时每轮最多六次请求。\nJWT 请填写凭据、开发者、项目 ID 和 HA 容器内的 Ed25519 私钥路径；API Key 可留空。使用 API Key 时无需填写 JWT 字段。",
+        "description": "API Host 位于和风天气控制台的设置中，仅填写域名。位置格式为经度,纬度，例如 112.92,28.22。更新间隔以秒计；启用全部功能时每轮最多六次请求。\nJWT 请填写凭据、开发者、项目 ID 和 HA 容器内的 Ed25519 私钥路径；API Key 可留空。使用 API Key 时无需填写 JWT 字段。\n夜间时段按 HA 本地时间计算，支持跨午夜；开始等于结束或关闭开关时全天使用固定间隔。600 秒为 10 分钟，1800 秒为 30 分钟。",
         "data": {
           "name": "名称",
           "api_host": "API Host",
@@ -12,18 +12,22 @@
           "location": "经度,纬度",
           "default": "每日预报天数",
           "hours": "小时预报范围",
-          "interval": "更新间隔（秒）",
+          "interval": "白天／固定刷新间隔（秒）",
           "extras": "附加功能",
           "auth_type": "认证方式",
           "key_id": "JWT 凭据 ID（kid）",
           "developer_id": "开发者 ID（iss）",
           "project_id": "项目 ID（sub）",
-          "private_key_file": "HA 服务器私钥文件路径"
+          "private_key_file": "HA 服务器私钥文件路径",
+          "night_enabled": "启用夜间刷新时段",
+          "night_start": "夜间开始小时（0–23）",
+          "night_end": "夜间结束小时（0–23）",
+          "night_interval": "夜间刷新间隔（秒）"
         }
       },
       "reconfigure": {
         "title": "重新配置和风天气",
-        "description": "API Key 留空表示保留原值。修改后先验证天气接口，再保存配置。位置修改后保留原天气实体 ID。\nJWT 请填写凭据、开发者、项目 ID 和 HA 容器内的 Ed25519 私钥路径；API Key 可留空。使用 API Key 时无需填写 JWT 字段。",
+        "description": "API Key 留空表示保留原值。修改后先验证天气接口，再保存配置。位置修改后保留原天气实体 ID。\nJWT 请填写凭据、开发者、项目 ID 和 HA 容器内的 Ed25519 私钥路径；API Key 可留空。使用 API Key 时无需填写 JWT 字段。\n夜间时段按 HA 本地时间计算，支持跨午夜；开始等于结束或关闭开关时全天使用固定间隔。600 秒为 10 分钟，1800 秒为 30 分钟。",
         "data": {
           "name": "名称",
           "api_host": "API Host",
@@ -31,13 +35,17 @@
           "location": "经度,纬度",
           "default": "每日预报天数",
           "hours": "小时预报范围",
-          "interval": "更新间隔（秒）",
+          "interval": "白天／固定刷新间隔（秒）",
           "extras": "附加功能",
           "auth_type": "认证方式",
           "key_id": "JWT 凭据 ID（kid）",
           "developer_id": "开发者 ID（iss）",
           "project_id": "项目 ID（sub）",
-          "private_key_file": "HA 服务器私钥文件路径"
+          "private_key_file": "HA 服务器私钥文件路径",
+          "night_enabled": "启用夜间刷新时段",
+          "night_start": "夜间开始小时（0–23）",
+          "night_end": "夜间结束小时（0–23）",
+          "night_interval": "夜间刷新间隔（秒）"
         }
       }
     },
@@ -55,13 +63,17 @@
     "step": {
       "init": {
         "title": "和风天气设置",
-        "description": "更新间隔以秒计，最短 300 秒。未来 24 小时降水需要至少 24 小时预报。关闭附加功能后相关屏幕数据会显示不可用。",
+        "description": "更新间隔以秒计，最短 300 秒。未来 24 小时降水需要至少 24 小时预报。关闭附加功能后相关屏幕数据会显示不可用。\n夜间时段按 HA 本地时间计算，支持跨午夜；开始等于结束或关闭开关时全天使用固定间隔。600 秒为 10 分钟，1800 秒为 30 分钟。",
         "data": {
           "name": "名称",
           "default": "每日预报天数",
           "hours": "小时预报范围",
-          "interval": "更新间隔（秒）",
-          "extras": "附加功能"
+          "interval": "白天／固定刷新间隔（秒）",
+          "extras": "附加功能",
+          "night_enabled": "启用夜间刷新时段",
+          "night_start": "夜间开始小时（0–23）",
+          "night_end": "夜间结束小时（0–23）",
+          "night_interval": "夜间刷新间隔（秒）"
         }
       }
     },

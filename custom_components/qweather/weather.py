@@ -12,11 +12,13 @@ from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.event import async_track_time_interval
 from homeassistant.helpers.device_registry import DeviceInfo
+from homeassistant.util import dt as dt_util
 
 from .api import QWeatherClient, QWeatherError, coordinates, validate_host
 from .data import current_attributes, daily_forecasts, hourly_forecasts, extra_attributes
 from .settings import normalize
 from .auth import async_auth
+from .schedule import refresh_interval
 from homeassistant.exceptions import ConfigEntryNotReady
 
 _LOGGER = logging.getLogger(__name__)
@@ -50,7 +52,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
     latitude, longitude = coordinates(data["location"])
     client = QWeatherClient(async_get_clientsession(hass), data["api_host"], data.get("api_key"), latitude, longitude,
                             data["default"], data["hours"], data["extras"], auth=auth)
-    entity = QWeather(client, data["name"], interval=data["interval"])
+    entity = QWeather(client, data["name"], interval=data["interval"], schedule=data)
     entity._attr_unique_id = entry.data["entity_unique_id"]
     entity._attr_device_info = DeviceInfo(identifiers={("qweather", entry.entry_id)}, name=data["name"], manufacturer="QWeather", model="Weather API v1")
     async_add_entities([entity], True)
@@ -66,7 +68,7 @@ class QWeather(WeatherEntity):
     _attr_supported_features = WeatherEntityFeature.FORECAST_DAILY | WeatherEntityFeature.FORECAST_HOURLY
     _attr_attribution = "Weather data by QWeather / 和风天气"
 
-    def __init__(self, client, name, interval=None):
+    def __init__(self, client, name, interval=None, schedule=None):
         super().__init__()
         self._client = client
         self._attr_name = name
@@ -75,6 +77,8 @@ class QWeather(WeatherEntity):
         self._daily = []
         self._hourly = []
         self._interval = interval
+        self._schedule = schedule
+        self._last_refresh_at = None
         self._attr_should_poll = interval is None
         self._refresh_lock = asyncio.Lock()
 
@@ -82,13 +86,23 @@ class QWeather(WeatherEntity):
         await super().async_added_to_hass()
         if self._interval is not None:
             async def refresh(now):
-                await self.async_update()
-                self.async_write_ha_state()
-            self.async_on_remove(async_track_time_interval(self.hass, refresh, timedelta(seconds=self._interval), name="qweather refresh"))
+                if await self.async_update(scheduled=True):
+                    self.async_write_ha_state()
+            # Check locally once per minute; only a due refresh calls the API.
+            self.async_on_remove(async_track_time_interval(self.hass, refresh, timedelta(minutes=1), name="qweather refresh"))
 
-    async def async_update(self):
+    async def async_update(self, *, scheduled=False):
         async with self._refresh_lock:
-            await self._async_refresh()
+            if scheduled:
+                interval = refresh_interval(self._schedule, dt_util.now()) if self._schedule else self._interval
+                if self._last_refresh_at is not None and (dt_util.utcnow() - self._last_refresh_at).total_seconds() < interval:
+                    return False
+            try:
+                await self._async_refresh()
+            finally:
+                # Failed attempts also wait for the configured interval.
+                self._last_refresh_at = dt_util.utcnow()
+            return True
 
     async def _async_refresh(self):
         """Publish a complete refresh, never a mixture of old and new data."""

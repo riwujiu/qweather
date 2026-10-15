@@ -61,7 +61,7 @@ async def main():
             assert registry.async_get("weather.zhangsha").id == legacy.id
             assert registry.async_get("weather.zhangsha").config_entry_id == entry.entry_id
             assert hass.states.get("weather.zhangsha").state not in ("unknown", "unavailable")
-            assert len(active()) == 1 and active()[0]["interval"] == 600
+            assert len(active()) == 1 and active()[0]["interval"] == 60
             print("UI setup, validation, credential failure, legacy entity adoption OK", flush=True)
 
             duplicate = await hass.config_entries.flow.async_init("qweather", context={"source": "user"}, data=data)
@@ -70,14 +70,32 @@ async def main():
             assert imported["type"] == "abort" and entry.data["interval"] == 600
             options = await hass.config_entries.options.async_init(entry.entry_id)
             assert options["type"] == "form"
-            options = await hass.config_entries.options.async_configure(options["flow_id"], {"name": "Changsha", "default": 3, "hours": 24, "interval": 900, "extras": ["alerts"]})
+            options = await hass.config_entries.options.async_configure(options["flow_id"], {"name": "Changsha", "default": 3, "hours": 24, "interval": 900, "night_enabled": True, "night_start": 22, "night_end": 7, "night_interval": 1800, "extras": ["alerts"]})
             assert options["type"] == "create_entry"
             await hass.async_block_till_done()
             assert entry.options["interval"] == 900
-            assert len(active()) == 1 and active()[0]["interval"] == 900
+            assert entry.options["night_enabled"] and entry.options["night_start"] == 22 and entry.options["night_interval"] == 1800
+            assert len(active()) == 1 and active()[0]["interval"] == 60
             assert registry.async_get("weather.zhangsha").id == legacy.id
             await active()[0]["action"](datetime.now(timezone.utc))
             print("Duplicate/import guards, options reload and single periodic refresh OK", flush=True)
+
+            from zoneinfo import ZoneInfo
+            from datetime import timedelta
+            entity = hass.data["weather"].get_entity("weather.zhangsha")
+            local = datetime(2026, 10, 15, 21, 50, tzinfo=ZoneInfo("Asia/Shanghai"))
+            entity._last_refresh_at = local.astimezone(timezone.utc)
+            with patch.object(entity, "_async_refresh", wraps=entity._async_refresh) as refresh:
+                async def tick(at):
+                    with patch("custom_components.qweather.weather.dt_util.now", return_value=at), patch("custom_components.qweather.weather.dt_util.utcnow", return_value=at.astimezone(timezone.utc)):
+                        await active()[0]["action"](at.astimezone(timezone.utc))
+                await tick(local + timedelta(minutes=10))
+                assert refresh.await_count == 0  # 22:00 now uses the night interval.
+                await tick(local + timedelta(minutes=30))
+                assert refresh.await_count == 1
+                await tick(local + timedelta(minutes=31))
+                assert refresh.await_count == 1
+            print("Real HA timer callback switches schedule without extra one-minute API calls OK", flush=True)
 
             flow = await hass.config_entries.flow.async_init("qweather", context={"source": "reconfigure", "entry_id": entry.entry_id})
             assert flow["type"] == "form" and "private-test-key" not in repr(flow["data_schema"])
@@ -88,7 +106,7 @@ async def main():
             assert entry.unique_id == "qweather_v1_28.0_113.0"
             assert registry.async_get("weather.zhangsha").id == legacy.id
             assert len(hass.states.async_all("weather")) == 1
-            assert len(active()) == 1 and active()[0]["interval"] == 1200
+            assert len(active()) == 1 and active()[0]["interval"] == 60
             assert await hass.config_entries.async_unload(entry.entry_id)
             await hass.async_block_till_done()
             assert not active()

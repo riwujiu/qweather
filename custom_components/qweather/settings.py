@@ -1,8 +1,9 @@
 """Shared validation for UI configuration and legacy YAML imports."""
 from .api import coordinates, validate_host
 
-DEFAULTS = {"name": "和风天气", "default": 7, "hours": 24, "extras": [], "interval": 1800}
-OPTIONS = ("name", "default", "hours", "extras", "interval")
+DEFAULTS = {"name": "和风天气", "default": 7, "hours": 24, "extras": [], "interval": 1800,
+            "night_enabled": False, "night_start": 0, "night_end": 7, "night_interval": 1800}
+OPTIONS = ("name", "default", "hours", "extras", "interval", "night_enabled", "night_start", "night_end", "night_interval")
 
 
 def normalize(data):
@@ -28,7 +29,10 @@ def normalize(data):
             result.pop(field, None)
     if not result["name"]:
         raise ValueError("Name required")
-    for key, low, high in (("default", 1, 10), ("hours", 1, 240), ("interval", 300, 86400)):
+    if not isinstance(result["night_enabled"], bool):
+        raise ValueError("Night schedule toggle must be boolean")
+    for key, low, high in (("default", 1, 10), ("hours", 1, 240), ("interval", 300, 86400),
+                           ("night_interval", 300, 86400), ("night_start", 0, 23), ("night_end", 0, 23)):
         result[key] = int(result[key])
         if not low <= result[key] <= high:
             raise ValueError("Invalid range")

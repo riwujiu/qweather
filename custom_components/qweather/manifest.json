@@ -3,7 +3,7 @@
   "name": "和风天气 QWeather",
   "config_flow": true,
   "iot_class": "cloud_polling",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "documentation": "https://github.com/riwujiu/qweather",
   "issue_tracker": "https://github.com/riwujiu/qweather/issues",
   "codeowners": [

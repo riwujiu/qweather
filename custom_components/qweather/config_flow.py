@@ -27,7 +27,9 @@ def form_schema(defaults, credentials=False, new=False):
         for field in ("key_id", "developer_id", "project_id", "private_key_file"):
             fields[vol.Optional(field, default=defaults.get(field, "/config/.qweather-jwt/ed25519-private.pem" if field == "private_key_file" else ""))] = str
         fields[vol.Required("location", default=defaults.get("location", ""))] = str
-    for key, low, high in (("default", 1, 10), ("hours", 1, 240), ("interval", 300, 86400)):
+    fields[vol.Required("night_enabled", default=defaults.get("night_enabled", DEFAULTS["night_enabled"]))] = bool
+    for key, low, high in (("default", 1, 10), ("hours", 1, 240), ("interval", 300, 86400),
+                           ("night_interval", 300, 86400), ("night_start", 0, 23), ("night_end", 0, 23)):
         fields[vol.Required(key, default=defaults.get(key, DEFAULTS[key]))] = vol.All(vol.Coerce(int), vol.Range(min=low, max=high))
     fields[vol.Required("extras", default=defaults.get("extras", []))] = selector.SelectSelector(
         selector.SelectSelectorConfig(options=["air", "alerts", "minutely"], multiple=True, translation_key="extras")
