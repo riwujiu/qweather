@@ -9,6 +9,7 @@ from unittest.mock import patch
 
 from homeassistant import bootstrap, loader
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import entity_registry
 
 from custom_components.qweather.api import QWeatherClient
 
@@ -39,6 +40,10 @@ async def main():
             states = hass.states.async_all("weather")
             assert result and len(states) == 1, "Weather entity not created"
             state = states[0]
+            entries = hass.config_entries.async_entries("qweather")
+            assert len(entries) == 1 and entries[0].state.value == "loaded", "Config entry not loaded"
+            registered = entity_registry.async_get(hass).async_get(state.entity_id)
+            assert registered.config_entry_id == entries[0].entry_id, "Entity not attached to UI entry"
             assert state.state not in ("unknown", "unavailable"), "Weather unavailable"
             assert state.attributes.get("air_available") and state.attributes.get("alerts_available") and state.attributes.get("minutely_available"), "Supplemental product unavailable"
             assert state.attributes.get("pm25") is not None

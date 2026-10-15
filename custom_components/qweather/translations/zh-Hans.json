@@ -1,0 +1,24 @@
+{
+  "title": "和风天气 QWeather",
+  "config": {
+    "step": {
+      "user": {
+        "title": "连接和风天气",
+        "description": "API Host 位于和风天气控制台的设置中，仅填写域名。位置格式为经度,纬度，例如 112.92,28.22。更新间隔以秒计；启用全部功能时每轮最多六次请求。",
+        "data": {"name":"名称","api_host":"API Host","api_key":"API Key","location":"经度,纬度","default":"每日预报天数","hours":"小时预报范围","interval":"更新间隔（秒）","extras":"附加功能"}
+      },
+      "reconfigure": {
+        "title": "重新配置和风天气",
+        "description": "API Key 留空表示保留原值。修改后先验证天气接口，再保存配置。位置修改后保留原天气实体 ID。",
+        "data": {"name":"名称","api_host":"API Host","api_key":"新的 API Key（留空保留）","location":"经度,纬度","default":"每日预报天数","hours":"小时预报范围","interval":"更新间隔（秒）","extras":"附加功能"}
+      }
+    },
+    "error": {"cannot_connect":"无法获取天气，请检查 API Host、Key、服务权限、额度和网络连接。","invalid_settings":"参数格式或范围不正确，请检查经纬度及数值。"},
+    "abort": {"already_configured":"此位置已经配置。","invalid_settings":"YAML 参数无效。","reconfigure_successful":"配置已更新。"}
+  },
+  "options": {
+    "step": {"init":{"title":"和风天气设置","description":"更新间隔以秒计，最短 300 秒。未来 24 小时降水需要至少 24 小时预报。关闭附加功能后相关屏幕数据会显示不可用。","data":{"name":"名称","default":"每日预报天数","hours":"小时预报范围","interval":"更新间隔（秒）","extras":"附加功能"}}},
+    "error":{"invalid_settings":"参数格式或范围不正确。"}
+  },
+  "selector":{"extras":{"options":{"air":"空气质量（PM2.5）","alerts":"天气预警及全文","minutely":"分钟降雨提示"}}}
+}

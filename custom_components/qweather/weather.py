@@ -1,5 +1,6 @@
 """QWeather weather/v1 platform for modern Home Assistant."""
 from datetime import timedelta
+import asyncio
 import logging
 
 import aiohttp
@@ -9,9 +10,12 @@ from homeassistant.components.weather import PLATFORM_SCHEMA, WeatherEntity, Wea
 from homeassistant.const import UnitOfLength, UnitOfPressure, UnitOfSpeed, UnitOfTemperature
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers.event import async_track_time_interval
+from homeassistant.helpers.device_registry import DeviceInfo
 
 from .api import QWeatherClient, QWeatherError, coordinates, validate_host
 from .data import current_attributes, daily_forecasts, hourly_forecasts, extra_attributes
+from .settings import normalize
 
 _LOGGER = logging.getLogger(__name__)
 SCAN_INTERVAL = timedelta(minutes=30)
@@ -27,12 +31,23 @@ PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend({
 
 
 async def async_setup_platform(hass, config, async_add_entities, discovery_info=None):
-    """Set up a YAML weather entity; credentials belong in secrets.yaml."""
+    """Import legacy YAML once; subsequent edits belong in the UI."""
     latitude, longitude = config["location"]
-    client = QWeatherClient(async_get_clientsession(hass), config["api_host"],
-                            config["api_key"], latitude, longitude,
-                            config["default"], config["hours"], config["extras"])
-    async_add_entities([QWeather(client, config["name"])], True)
+    data = {k: config[k] for k in ("name", "api_host", "api_key", "default", "hours", "extras")}
+    data["location"] = f"{longitude:.2f},{latitude:.2f}"
+    data["interval"] = int(config.get("scan_interval", SCAN_INTERVAL).total_seconds())
+    hass.async_create_task(hass.config_entries.flow.async_init("qweather", context={"source": "import"}, data=data))
+
+
+async def async_setup_entry(hass, entry, async_add_entities):
+    data = normalize({**entry.data, **entry.options})
+    latitude, longitude = coordinates(data["location"])
+    client = QWeatherClient(async_get_clientsession(hass), data["api_host"], data["api_key"], latitude, longitude,
+                            data["default"], data["hours"], data["extras"])
+    entity = QWeather(client, data["name"], interval=data["interval"])
+    entity._attr_unique_id = entry.data["entity_unique_id"]
+    entity._attr_device_info = DeviceInfo(identifiers={("qweather", entry.entry_id)}, name=data["name"], manufacturer="QWeather", model="Weather API v1")
+    async_add_entities([entity], True)
 
 
 class QWeather(WeatherEntity):
@@ -45,7 +60,7 @@ class QWeather(WeatherEntity):
     _attr_supported_features = WeatherEntityFeature.FORECAST_DAILY | WeatherEntityFeature.FORECAST_HOURLY
     _attr_attribution = "Weather data by QWeather / 和风天气"
 
-    def __init__(self, client, name):
+    def __init__(self, client, name, interval=None):
         super().__init__()
         self._client = client
         self._attr_name = name
@@ -53,8 +68,23 @@ class QWeather(WeatherEntity):
         self._attr_available = False
         self._daily = []
         self._hourly = []
+        self._interval = interval
+        self._attr_should_poll = interval is None
+        self._refresh_lock = asyncio.Lock()
+
+    async def async_added_to_hass(self):
+        await super().async_added_to_hass()
+        if self._interval is not None:
+            async def refresh(now):
+                await self.async_update()
+                self.async_write_ha_state()
+            self.async_on_remove(async_track_time_interval(self.hass, refresh, timedelta(seconds=self._interval), name="qweather refresh"))
 
     async def async_update(self):
+        async with self._refresh_lock:
+            await self._async_refresh()
+
+    async def _async_refresh(self):
         """Publish a complete refresh, never a mixture of old and new data."""
         try:
             current, daily, hourly = await self._client.fetch()

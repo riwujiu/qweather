@@ -5,7 +5,17 @@
 
 ## 安装与配置
 
-复制 `custom_components/qweather` 到 HA 的 `/config/custom_components/`，合并以下配置并重启 HA：
+复制 `custom_components/qweather` 到 HA 的 `/config/custom_components/`，重启 HA。在“设置 → 设备与服务 → 添加集成”中搜索“和风天气 QWeather”，填写 API Host、API Key 和经纬度即可。
+
+集成卡片的“配置”可修改名称、预报范围、更新间隔和附加功能；菜单中的“重新配置”还可修改 Host、Key 和位置。已有 Key 不会回填到表单，重新配置时留空会保留原 Key。配置通过后自动重新加载，不需要重启 HA。界面支持中文及英文。
+
+位置修改后保留原天气实体 ID；同一位置不能重复添加。每个配置条目注册一个天气设备。更新间隔为秒，允许 300–86400 秒，默认 1800 秒。
+
+### 从旧版 YAML 迁移
+
+0.3.0 会在首次启动时把原有 weather YAML 配置导入为可在界面管理的条目，并沿用原天气实体登记及 ID。确认集成和实体正常后，从 configuration.yaml 移除对应的 qweather weather 配置；不再需要其 secrets.yaml 条目时也可删除。原有屏幕模板仍需保留。后续 YAML 不会覆盖已保存的界面设置。
+
+仍支持用以下配置首次导入：
 
 ```yaml
 weather:
@@ -20,7 +30,7 @@ weather:
     scan_interval: 1800     # 秒，默认 30 分钟
 ```
 
-在服务器的 `secrets.yaml` 中设置个人 API Host（控制台→设置）和 API Key。Host 只填域名，不加 `https://` 或路径。不要上传 secrets.yaml。
+首次使用 YAML 导入时，在服务器的 `secrets.yaml` 中设置个人 API Host（控制台→设置）和 API Key。Host 只填域名，不加 `https://` 或路径。不要上传 secrets.yaml 或 HA 的 .storage 目录；界面设置及凭据由 HA 的配置条目保存。
 位置会四舍五入到两位小数，符合 v1 精度要求。不启用附加产品时每轮最多三个请求，默认每天约 144 次；全部启用时每轮最多六个，默认每天约 288 次。收费和额度以和风控制台为准。
 
 新版接口：
@@ -74,5 +84,7 @@ python -m unittest discover -s tests -v
 2026-10-15（Asia/Shanghai）验证：Home Assistant 2026.9.3 中 16 项测试全部通过；隔离 HA 使用真实服务加载实体成功，六个产品均可用，`weather.get_forecasts` 返回 7 天与 24 小时预报。HA 将原生 m/s 和 m 按公制显示设置转换为 km/h 和 km。21:08 正式 HA 已确认天气、PM2.5、预警、未来 24 小时降水和七日预报模板有效。
 
 `tests/smoke_ha.py` 使用响应样本验证完整 HA 加载、附加产品和预报服务；加 `--live` 时从标准输入接收仅含 `api_host`、`api_key` 的 JSON，供私下验证。测试创建临时独立 HA 配置目录，结束后删除，不读取正式配置。
+
+`tests/smoke_ui.py` 在隔离 HA 中验证界面添加、参数／连接错误、重复配置拦截、沿用 YAML 实体登记、选项自动重载、重新配置、Key 留空保留、位置修改后 ID 不变、定时刷新取消，以及 YAML 自动导入。0.3.0 已在 HA 2026.9.3 完成这些流程和真实接口验证。
 
 参考：[天气 API](https://dev.qweather.com/docs/api/weather/)、[身份认证](https://dev.qweather.com/docs/configuration/authentication/)、[API Host](https://dev.qweather.com/docs/configuration/api-host/)。
