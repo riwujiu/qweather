@@ -16,10 +16,10 @@ SUNNY = "sunny"  # 晴天
 WINDY = "windy"  # 有风
 WINDY_VARIANT = "windy-variant"  # 风变
 EXCEPTIONAL = "exceptional"  # 例外
-CLOUDY_NIGHT = "cloudy-night-fill"  # 夜间多云
-POURING_RAINY = "extreme-rain"  # 倾盆大雨
-SNOWY_HEAVY = "heavy-snow"  # 大雪
-PARTY_CLOUDY_NIGHT = "partly-cloudy-night-fill"  # 夜间多云
+CLOUDY_NIGHT = PARTYCLOUDY
+POURING_RAINY = POURING
+SNOWY_HEAVY = SNOWY
+PARTY_CLOUDY_NIGHT = PARTYCLOUDY
 
 CONDITION_MAP = {
     "100": SUNNY,  # 晴
@@ -62,13 +62,13 @@ CONDITION_MAP = {
     "404": SNOWY_RAINY,  # 雨夹雪
     "405": SNOWY_RAINY,  # 雨雪天气
     "406": SNOWY_RAINY,  # 阵雨夹雪
-    "407": RAINY,  # 阵雪
-    "408": RAINY,  # 小到中雪
-    "409": RAINY,  # 中到大雪
+    "407": SNOWY,  # 阵雪
+    "408": SNOWY,  # 小到中雪
+    "409": SNOWY,  # 中到大雪
     "410": SNOWY_HEAVY,  # 大到暴雪
     "456": SNOWY_RAINY,  # 阵雨夹雪
-    "457": RAINY,  # 阵雪
-    "499": RAINY,  # 雪
+    "457": SNOWY,  # 阵雪
+    "499": SNOWY,  # 雪
     "500": FOG,  # 薄雾
     "501": FOG,  # 雾
     "502": FOG,  # 霾
